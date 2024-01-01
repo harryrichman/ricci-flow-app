@@ -10,6 +10,7 @@ from matplotlib.colors import TwoSlopeNorm
 class RicciFlowWidget:
     def __init__(self, G, pos, epsilon=0.1):
         self.G = G
+        self.L = nx.laplacian_matrix(G, weight="weight").toarray()
         self.pos = pos
         self.epsilon = epsilon
         self.num_nodes = G.number_of_nodes()
@@ -17,23 +18,13 @@ class RicciFlowWidget:
         self.edge_resistance = {}
         self.edge_curvature = {}
         self.node_weights = np.array(
-            [1 for v in G.nodes()]
+            [1 for _ in G.nodes()]
         )
         self.edge_weights = np.array(
             [1 for _ in G.edges()]
         )
         self.iter_count = 1
         self.compute_resistance_curvature()
-        # add resistance attribute to edges
-        for e in G.edges():
-            self.edge_resistance[e] = self.Omega[e[0], e[1]]
-            self.edge_curvature[e] = (
-                1 / G.degree[e[0]] + 1 / G.degree[e[1]] 
-                - self.edge_resistance[e] / G.edges[e[0], e[1]]["length"]
-            )
-            # add curvature attribute to edges
-            G.edges[e[0], e[1]]["resistance"] = self.Omega[e[0], e[1]]
-            G.edges[e[0], e[1]]["curvature"] = self.edge_curvature[e]
 
         self.ax = None
         self.drawn_nodes = None
@@ -44,7 +35,6 @@ class RicciFlowWidget:
         """resistance matrix"""
         G = self.G
         n = self.num_nodes
-        self.L = nx.laplacian_matrix(G, weight="weight").toarray()
         res_matrix = np.zeros((n, n))
         for u in G.nodes():
             for v in G.nodes():
@@ -63,6 +53,33 @@ class RicciFlowWidget:
             np.linalg.inv(self.Omega), np.ones((n, 1)) * self.two_tau)
         # node_weights = "resistance curvature" after Derviendt and Lambiotte
         self.node_weights = self.kappa.flatten()
+        # add resistance attribute to edges
+        for e in G.edges():
+            self.edge_resistance[e] = self.Omega[e[0], e[1]]
+            self.edge_curvature[e] = (
+                1 / G.degree[e[0]] + 1 / G.degree[e[1]] 
+                - self.edge_resistance[e] / G.edges[e[0], e[1]]["length"]
+            )
+            # add curvature attribute to edges
+            G.edges[e[0], e[1]]["resistance"] = self.Omega[e[0], e[1]]
+            G.edges[e[0], e[1]]["curvature"] = self.edge_curvature[e]
+
+    def ricci_flow_step(self):
+        G = self.G
+        # update lengths according to Ricci flow
+        self.iter_count += 1
+        print("button pressed; count=", self.iter_count)
+        # compute gradient using curvature, update length 
+        for e in G.edges():
+            curv = G.edges[e[0], e[1]]["curvature"]
+            new_length = G.edges[e[0], e[1]]["length"]
+            new_length += - self.epsilon * curv
+            if new_length < 0.01:
+                new_length = 0.01
+            # new_length += - self.epsilon * curv * length
+            G.edges[e[0], e[1]]["length"] = new_length
+            G.edges[e[0], e[1]]["weight"] = 1 / new_length
+        self.compute_resistance_curvature()
 
     def animate(self):
         G = self.G
@@ -89,7 +106,7 @@ class RicciFlowWidget:
             edge_color=[-self.edge_curvature[e] for e in G.edges()],
             edge_cmap=self.cmap,
             edge_vmin=-0.5,
-            edge_vmax=0.5
+            edge_vmax=0.5,
         )
         self.drawn_edges = nx.draw_networkx_edges(
             G, pos, ax=self.ax,
@@ -101,7 +118,7 @@ class RicciFlowWidget:
         self.edge_labels = nx.draw_networkx_edge_labels(
             G, pos, 
             ax=self.ax, 
-            edge_labels=e_label_dict
+            edge_labels=e_label_dict,
         )
         # show iteration count
         props = dict(alpha=0.5)
@@ -114,7 +131,7 @@ class RicciFlowWidget:
             bbox=props)
         
         ani = animation.FuncAnimation(
-            fig, self.animate_next, interval=30, save_count=30
+            fig, self.animate_next, interval=30, save_count=30,
         )
         plt.show()
         
@@ -251,24 +268,10 @@ class RicciFlowWidget:
 
     def on_press_animate(self):
         self.on_press(None)
-
+    
     def on_press(self, event):
-        G = self.G
         # update lengths according to Ricci flow
-        self.iter_count += 1
-        print("button pressed; count=", self.iter_count)
-        # compute gradient using curvature, update length 
-        for e in G.edges():
-            curv = G.edges[e[0], e[1]]["curvature"]
-            new_length = G.edges[e[0], e[1]]["length"]
-            new_length += - self.epsilon * curv
-            if new_length < 0.01:
-                new_length = 0.01
-            # new_length += - self.epsilon * curv * length
-            G.edges[e[0], e[1]]["length"] = new_length
-            G.edges[e[0], e[1]]["weight"] = 1 / new_length
-        self.compute_resistance_curvature()
-
+        self.ricci_flow_step()
         # update labels to reflect changed curvature
         self.draw_update()
 
@@ -279,11 +282,18 @@ if __name__ ==  "__main__":
 
     # G = nx.path_graph(6)
     # G = nx.Graph(); G.add_edges_from([(0,1),(1,2),(1,3),(3,4),(3,5),(5,6)])
+    G = nx.Graph(); G.add_edges_from(
+        [
+            (0,1),(1,2),(0,3),(3,2),(1,3),(0,4),(4,2),(4,9),
+            (5,6),(6,7),(5,8),(8,7),(6,8),(5,9),(9,7)
+        ]
+    )
     # G = nx.cycle_graph(7)
     # G = nx.grid_graph([2,5])
 
     # G = nx.bull_graph()
-    G = nx.frucht_graph()
+    # G = nx.frucht_graph()
+    # G = nx.barbell_graph(4, 0)
     # G = nx.diamond_graph()
     # G = nx.karate_club_graph()
     
