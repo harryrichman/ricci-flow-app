@@ -15,14 +15,21 @@ class RicciFlowWidget:
         self.epsilon = epsilon
         self.num_nodes = G.number_of_nodes()
 
+        for e in G.edges():
+            if "length" in G.edges[e[0], e[1]].keys():
+                pass
+            else:
+                G.edges[e[0], e[1]]["length"] = 1
+            
         self.edge_resistance = {}
         self.edge_curvature = {}
+        # node_weights = "resistance curvature" after Derviendt and Lambiotte
         self.node_weights = np.array(
             [1 for _ in G.nodes()]
         )
-        self.edge_weights = np.array(
-            [1 for _ in G.edges()]
-        )
+        # self.edge_weights = np.array(
+        #     [1 for _ in G.edges()]
+        # )
         self.iter_count = 1
         self.compute_resistance_curvature()
 
@@ -79,6 +86,7 @@ class RicciFlowWidget:
             # new_length += - self.epsilon * curv * length
             G.edges[e[0], e[1]]["length"] = new_length
             G.edges[e[0], e[1]]["weight"] = 1 / new_length
+        # update curvatures
         self.compute_resistance_curvature()
 
     def animate(self):
@@ -96,10 +104,11 @@ class RicciFlowWidget:
         self.drawn_nodes = nx.draw_networkx_nodes(
             G, pos, ax=self.ax, 
             node_color=[-self.node_weights[v] for v in G.nodes()], 
+            edgecolors="black",
             cmap=self.cmap,
             vmin=-0.5,
             vmax=0.5)
-        #draw edges and colored edges
+        # draw edges and color edges
         self.drawn_edges_color = nx.draw_networkx_edges(
             G, pos, ax=self.ax,
             width=6,
@@ -163,7 +172,7 @@ class RicciFlowWidget:
             cmap=self.cmap,
             vmin=-0.5,
             vmax=0.5)
-        #draw edges and colored edges
+        # draw edges and color edges
         self.drawn_edges_color = nx.draw_networkx_edges(
             G, pos, ax=self.ax,
             width=6,
@@ -195,8 +204,9 @@ class RicciFlowWidget:
             bbox=props)
 
     def animate_next(self, i):
+        # update lengths according to Ricci flow
         self.on_press(None)
-        self.draw_update()
+        # self.draw_update()
         print("i=", i)
         print("self.iter_count=", self.iter_count)
 
@@ -224,11 +234,18 @@ class RicciFlowWidget:
         self.drawn_nodes.set_offsets(
             [list(x) for x in pos.values()]
         )
+        self.drawn_nodes.set(
+            color=[self.cmap(0.5 -self.node_weights[v]) for v in G.nodes()],
+            edgecolor="black"
+        )
         # for v in G.nodes():
         #     t = self.drawn_labels[v]
         #     t.set_position(pos[v])
         self.drawn_edges_color.set_segments(
             [[pos[e[0]], pos[e[1]]] for e in G.edges()]
+        )
+        self.drawn_edges_color.set_color(
+            [self.cmap(0.5-self.edge_curvature[e]) for e in G.edges()]
         )
         self.drawn_edges.set_segments(
             [[pos[e[0]], pos[e[1]]] for e in G.edges()]
@@ -281,13 +298,6 @@ class RicciFlowWidget:
 if __name__ ==  "__main__":
 
     # G = nx.path_graph(6)
-    # G = nx.Graph(); G.add_edges_from([(0,1),(1,2),(1,3),(3,4),(3,5),(5,6)])
-    G = nx.Graph(); G.add_edges_from(
-        [
-            (0,1),(1,2),(0,3),(3,2),(1,3),(0,4),(4,2),(4,9),
-            (5,6),(6,7),(5,8),(8,7),(6,8),(5,9),(9,7)
-        ]
-    )
     # G = nx.cycle_graph(7)
     # G = nx.grid_graph([2,5])
 
@@ -297,15 +307,43 @@ if __name__ ==  "__main__":
     # G = nx.diamond_graph()
     # G = nx.karate_club_graph()
     
+    # tree graph
+    # G = nx.Graph(); G.add_edges_from([(0,1),(1,2),(1,3),(3,4),(3,5),(5,6)])
+
+    # barbell-like graph
+    G = nx.Graph(); G.add_edges_from([
+            (0,1),(1,2),(0,3),(3,2),(1,3),(0,4),(4,2),(4,9),
+            (5,6),(6,7),(5,8),(8,7),(6,8),(5,9),(9,7)
+    ])
+
+    # uneven cycle
+    # G = nx.Graph(); G.add_weighted_edges_from([
+    #     (0,1, 1), (1,2, 1), (2,0, 5)
+    # ], weight="length")
+
+    # pillow graph
+    # G = nx.Graph(); G.add_weighted_edges_from([
+    #     (0,1, 1), (1,2, 1), (0,3, 1), (3,2, 1), 
+    #     (4,5, 1), (5,6, 1), (4,7, 1), (7,6, 1), 
+    #     (0,8, 0.5), (8,4, 0.5), (2,9, 0.5), (9,6, 0.5)],
+    #     weight="length"
+    # )
+
+    # triangular prism
+    # G = nx.Graph(); G.add_weighted_edges_from([
+    #     (0,1, 1), (1,2, 1), (2,0, 0.1), (3,4, 1), (4,5, 1), (5,3, 0.1), 
+    #     (0,3, 1), (1,4, 1), (2,5, 1)
+    # ], weight="length")
+
     # change node names to integers
     mapping = {e : i for i, e in enumerate(G.nodes())}
     G = nx.relabel_nodes(G, mapping)
-    for (i, e) in enumerate(G.edges()):
-        G.edges[e[0], e[1]]["length"] = 1 + i % 1
-        G.edges[e[0], e[1]]["weight"] = 1.0 / (1 + i % 1)
+    # for (i, e) in enumerate(G.edges()):
+    #     G.edges[e[0], e[1]]["length"] = 1 + i % 1
+    #     G.edges[e[0], e[1]]["weight"] = 1.0 / (1 + i % 1)
     pos = nx.spring_layout(G, seed=932861)
 
-    widget = RicciFlowWidget(G, pos, epsilon=0.4)
+    widget = RicciFlowWidget(G, pos, epsilon=0.04)
     # widget.draw()
     # widget.connect()
     # plt.show()

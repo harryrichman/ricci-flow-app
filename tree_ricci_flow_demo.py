@@ -17,7 +17,7 @@ for (i, e) in enumerate(G.edges()):
     G.edges[e[0], e[1]]["weight"] = 1.0 / (1 + i % 1)
 pos = nx.spring_layout(G, seed=932861)
 
-widget = RicciFlowWidget(G, pos, epsilon=0.2)
+widget = RicciFlowWidget(G, pos, epsilon=0.02)
 # widget.draw()
 # widget.connect()
 # plt.show()
